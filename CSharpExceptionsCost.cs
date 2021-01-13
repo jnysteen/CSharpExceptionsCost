@@ -23,10 +23,10 @@ namespace CSharpExceptionsCost
 
         public ErrorCodesVsExceptionsBenchmark()
         {
-            _userService = new UserService();
+            _userService = UserService.CreateServiceForBenchmark();
         }
 
-        [Benchmark]
+        [Benchmark(Description = "Attempts to fetch a non-existent user with the exception-throwing method")]
         public bool GetUserWithExceptions()
         {
             try
@@ -39,35 +39,55 @@ namespace CSharpExceptionsCost
             }
         }
 
-        [Benchmark(Baseline = true)]
+        [Benchmark(Baseline = true, Description = "Attempts to fetch a non-existent user with the null-returning method")]
         public bool GetUserWithDefault()
         {
             return _userService.GetUserByIdOrDefault("") != null;
         }
         
-        [Benchmark]
+        [Benchmark(Description = "Attempts to fetch a non-existent user with the try/get method")]
         public bool GetUserWithTryGet()
         {
             return _userService.TryGetUserById("", out var foundUser);
         }
     }
     
+    /// <summary>
+    ///     A dummy service for fetching users.
+    ///     The only reason for this to be a "UserService" (and not just an "EntityFetcher") is to make the code
+    ///     a bit less abstract.
+    /// </summary>
     class UserService
     {
-        private readonly Dictionary<string, User> _userRepo;
+        private Dictionary<string, User> _userRepo;
 
-        public UserService()
+        private UserService()
         {
-            _userRepo = new Dictionary<string, User>
+        }
+        
+        public static UserService CreateServiceForBenchmark()
+        {
+            return new UserService()
             {
-                {"some-user", new User()
+                _userRepo = new Dictionary<string, User>
                 {
-                    Id = "some-user", 
-                    Name = "User!"
-                }}
+                    {
+                        "some-user-who-will-never-be-fetched", new User()
+                        {
+                            Id = "some-user-who-will-never-be-fetched",
+                            Name = "User!"
+                        }
+                    }
+                }
             };
         }
 
+        /// <summary>
+        ///     Fetches the user with the given ID. If no user is found, a UserNotFoundException will be thrown.
+        /// </summary>
+        /// <param name="userId">The ID of the user to fetch</param>
+        /// <returns>The user with the given ID</returns>
+        /// <exception cref="UserNotFoundException">Thrown if no user with the given ID can be found</exception>
         public User GetUserByIdOrThrowException(string userId)
         {
             try
@@ -80,11 +100,23 @@ namespace CSharpExceptionsCost
             }
         }
         
+        /// <summary>
+        ///     Fetches the user with the given ID. If no user is found, `null` is returned.
+        /// </summary>
+        /// <param name="userId">The ID of the user to fetch</param>
+        /// <returns>The user with the given ID - if no user is found, `null` is returned.</returns>
         public User GetUserByIdOrDefault(string userId)
         {
             return !_userRepo.TryGetValue(userId, out var foundUser) ? default : foundUser;
         }
 
+        /// <summary>
+        ///     Fetches the user with the given ID. If a user is found, `true` is returned and the user is returned in the `user` out parameter.
+        ///     If no user is found, `false` is returned.
+        /// </summary>
+        /// <param name="userId">The ID of the user to fetch</param>
+        /// <param name="user">The found user, if any</param>
+        /// <returns>`true`, if a user with the given ID has been found. `false` otherwise</returns>
         public bool TryGetUserById(string userId, out User user)
         {
             if (_userRepo.TryGetValue(userId, out var foundUser))
@@ -107,6 +139,9 @@ namespace CSharpExceptionsCost
         }
     }
 
+    /// <summary>
+    ///     A dummy entity, making the benchmark code a bit less abstract
+    /// </summary>
     internal class User
     {
         public string Id { get; set; }
